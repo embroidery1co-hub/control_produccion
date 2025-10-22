@@ -5,6 +5,7 @@ import 'screens/dashboard_screen.dart';
 import 'screens/pedidos_screen.dart';
 import 'screens/produccion_screen.dart';
 import 'screens/inventario_screen.dart';
+import 'screens/pdf_demo.dart';
 
 void main() {
   runApp(
@@ -30,6 +31,21 @@ class ControlProduccionApp extends StatelessWidget {
     );
   }
 }
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Control de Producción',
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: const PdfDemoPage(),
+    );
+  }
+}
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});

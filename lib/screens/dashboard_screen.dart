@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/order_provider.dart';
 import '../models.dart';
+import 'pdf_demo.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -24,9 +25,9 @@ class DashboardScreen extends StatelessWidget {
             icon: const Icon(Icons.picture_as_pdf),
             tooltip: 'Generar PDF',
             onPressed: () {
-              // Aquí llamarías a tu función de PDF
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Función PDF en desarrollo')),
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const PdfDemoPage()),
               );
             },
           ),
@@ -69,7 +70,26 @@ class DashboardScreen extends StatelessWidget {
                       subtitle: Text('Cliente: ${order.clienteId}'),
                       trailing: Text('\$${order.total.toStringAsFixed(2)}'),
                       onTap: () {
-                        // Aquí podrías navegar a detalles del pedido
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => PdfDemoPage(
+                              pedidoData: {
+                                'cliente': order.clienteId,
+                                'prendas': order.items.map((item) => {
+                                  'nombre': item.tipo.name,
+                                  'cantidad': item.cantidad,
+                                  'detalles': item.ubicacion,
+                                  'precio': item.precio,
+                                  'subtotal': item.subtotal,
+                                  'ubicacion': item.ubicacion,
+                                }).toList(),
+                                'total': order.total,
+                                'fecha': order.fechaRecepcion.toString().split(' ')[0],
+                              },
+                            ),
+                          ),
+                        );
                       },
                     ),
                   );

@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/order_provider.dart';
+import 'providers/precio_provider.dart';
+import 'providers/tiempo_produccion_provider.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/pedidos_screen.dart';
 import 'screens/produccion_screen.dart';
 import 'screens/inventario_screen.dart';
 import 'screens/pdf_demo.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => OrderProvider()),
+        ChangeNotifierProvider(create: (_) => PrecioProvider()),
+        ChangeNotifierProvider(create: (_) => TiempoProduccionProvider()),
       ],
       child: const ControlProduccionApp(),
     ),
@@ -31,21 +37,6 @@ class ControlProduccionApp extends StatelessWidget {
     );
   }
 }
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Control de Producción',
-      theme: ThemeData(primarySwatch: Colors.blue),
-      home: const PdfDemoPage(),
-    );
-  }
-}
-
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});

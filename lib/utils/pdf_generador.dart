@@ -1,138 +1,429 @@
-import 'dart:io';
-import 'dart:typed_data';
-import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart'; // ✅ Para getTemporaryDirectory
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:open_file/open_file.dart'; // ✅ Para OpenFile.open()
+import 'package:flutter/services.dart' show rootBundle;
+import 'dart:typed_data';
 
-class PdfGenerador {
-  /// 🧾 Genera el PDF del cliente (tipo factura)
-  static Future<Uint8List> generarPdfCliente({
-    required String nombreCliente,
-    required String documento,
-    required String telefono,
-    required String correo,
-    required String fecha,
-    required List<Map<String, dynamic>> prendas,
-    required double total,
-    required String observaciones,
-  }) async {
-    final pdf = pw.Document();
+// Función para generar un PDF de un pedido
+Future<Uint8List> generarPdfPedido(Map<String, dynamic> pedidoData) async {
+  final pdf = pw.Document();
 
-    // Logo
-    final logo = pw.MemoryImage(
-      (await rootBundle.load('assets/logo.png')).buffer.asUint8List(),
-    );
+  // Cargar una fuente personalizada (opcional)
+  // final fontData = await rootBundle.load('assets/fonts/OpenSans-Regular.ttf');
+  // final ttf = pw.Font.ttf(fontData);
 
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        build: (pw.Context context) => [
-          pw.Center(child: pw.Image(logo, height: 80)),
-          pw.SizedBox(height: 10),
-          pw.Center(
-            child: pw.Text(
-              'PERSONALIZAME',
-              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+  pdf.addPage(
+    pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      margin: pw.EdgeInsets.all(32), // <-- CONST ELIMINADO
+      build: (pw.Context context) {
+        return pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            // Encabezado
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'PersonalizaMe',
+                      style: pw.TextStyle(
+                        fontSize: 24,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.indigo,
+                      ),
+                    ),
+                    pw.SizedBox(height: 4), // <-- CONST ELIMINADO
+                    pw.Text(
+                      'Control de Producción',
+                      style: pw.TextStyle(
+                        fontSize: 16,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      'Fecha: ${pedidoData['fecha']}',
+                      style: pw.TextStyle(fontSize: 12), // <-- CONST ELIMINADO
+                    ),
+                    pw.Text(
+                      'Pedido: #${pedidoData['id']?.substring(0, 6) ?? ''}',
+                      style: pw.TextStyle(fontSize: 12), // <-- CONST ELIMINADO
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ),
-          pw.Center(child: pw.Text('Comprobante de Pedido', style: pw.TextStyle(fontSize: 14))),
-          pw.Divider(),
-          pw.SizedBox(height: 10),
 
-          pw.Text('📅 Fecha: $fecha'),
-          pw.Text('👤 Cliente: $nombreCliente'),
-          pw.Text('🧾 Documento: $documento'),
-          pw.Text('📞 Teléfono: $telefono'),
-          pw.Text('✉️ Correo: $correo'),
-          pw.SizedBox(height: 20),
+            pw.SizedBox(height: 24), // <-- CONST ELIMINADO
 
-          pw.Table.fromTextArray(
-            headers: ['Prenda', 'Cantidad', 'Detalles', 'Precio', 'Subtotal'],
-            data: prendas.map((p) => [
-              p['nombre'],
-              p['cantidad'].toString(),
-              p['detalles'] ?? '',
-              '\$${p['precio']}',
-              '\$${p['subtotal']}',
-            ]).toList(),
-          ),
-
-          pw.SizedBox(height: 20),
-          pw.Align(
-            alignment: pw.Alignment.centerRight,
-            child: pw.Text(
-              'Total: \$${total.toStringAsFixed(0)}',
-              style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+            // Información del cliente
+            pw.Container(
+              padding: pw.EdgeInsets.all(12), // <-- CONST ELIMINADO
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey300),
+                borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)), // <-- CONST ELIMINADO
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'Datos del Cliente',
+                    style: pw.TextStyle(
+                      fontSize: 16,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 8), // <-- CONST ELIMINADO
+                  pw.Text('Nombre: ${pedidoData['cliente']}'),
+                ],
+              ),
             ),
-          ),
-          pw.SizedBox(height: 20),
-          pw.Text('Observaciones:'),
-          pw.Text(observaciones),
-          pw.Divider(),
-          pw.Center(child: pw.Text('Gracias por confiar en PersonalizaMe 💛')),
-        ],
-      ),
-    );
 
-    // Guardar en archivo temporal
-    final output = await getTemporaryDirectory();
-    final file = File("${output.path}/Pedido_Cliente.pdf");
-    await file.writeAsBytes(await pdf.save());
+            pw.SizedBox(height: 24), // <-- CONST ELIMINADO
 
-    // Abrir el archivo
-    await OpenFile.open(file.path);
-
-    return await pdf.save();
-  }
-
-  /// 🏭 Genera el PDF para producción (orden interna)
-  static Future<Uint8List> generarPdfProduccion({
-    required String nombreCliente,
-    required String fecha,
-    required List<Map<String, dynamic>> prendas,
-    required String observaciones,
-  }) async {
-    final pdf = pw.Document();
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        build: (pw.Context context) => [
-          pw.Center(
-            child: pw.Text(
-              'ORDEN DE PRODUCCIÓN',
-              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+            // Tabla de items
+            pw.Text(
+              'Detalle del Pedido',
+              style: pw.TextStyle(
+                fontSize: 16,
+                fontWeight: pw.FontWeight.bold,
+              ),
             ),
-          ),
-          pw.Divider(),
-          pw.Text('Cliente: $nombreCliente'),
-          pw.Text('Fecha: $fecha'),
-          pw.SizedBox(height: 20),
+            pw.SizedBox(height: 8), // <-- CONST ELIMINADO
 
-          pw.Table.fromTextArray(
-            headers: ['Prenda', 'Cantidad', 'Detalles', 'Estado'],
-            data: prendas.map((p) => [
-              p['nombre'],
-              p['cantidad'].toString(),
-              p['detalles'] ?? '',
-              'Pendiente',
-            ]).toList(),
-          ),
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey300),
+              columnWidths: {
+                0: pw.FlexColumnWidth(3), // <-- CONST ELIMINADO
+                1: pw.FlexColumnWidth(1), // <-- CONST ELIMINADO
+                2: pw.FlexColumnWidth(2), // <-- CONST ELIMINADO
+                3: pw.FlexColumnWidth(2), // <-- CONST ELIMINADO
+              },
+              children: [
+                // Encabezado de la tabla
+                pw.TableRow(
+                  decoration: pw.BoxDecoration(color: PdfColors.grey200), // <-- CONST ELIMINADO
+                  children: [
+                    pw.Padding(
+                      padding: pw.EdgeInsets.all(8), // <-- CONST ELIMINADO
+                      child: pw.Text(
+                        'Prenda',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: pw.EdgeInsets.all(8), // <-- CONST ELIMINADO
+                      child: pw.Text(
+                        'Cant.',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                        textAlign: pw.TextAlign.center,
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: pw.EdgeInsets.all(8), // <-- CONST ELIMINADO
+                      child: pw.Text(
+                        'Detalles',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: pw.EdgeInsets.all(8), // <-- CONST ELIMINADO
+                      child: pw.Text(
+                        'Precio',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                        textAlign: pw.TextAlign.right,
+                      ),
+                    ),
+                  ],
+                ),
 
-          pw.SizedBox(height: 20),
-          pw.Text('Notas de producción:'),
-          pw.Text(observaciones),
-        ],
-      ),
-    );
+                // Filas de datos
+                ...List<pw.TableRow>.from(
+                  (pedidoData['prendas'] as List).map((prenda) {
+                    return pw.TableRow(
+                      children: [
+                        pw.Padding(
+                          padding: pw.EdgeInsets.all(8), // <-- CONST ELIMINADO
+                          child: pw.Text(prenda['nombre']),
+                        ),
+                        pw.Padding(
+                          padding: pw.EdgeInsets.all(8), // <-- CONST ELIMINADO
+                          child: pw.Text(
+                            prenda['cantidad'].toString(),
+                            textAlign: pw.TextAlign.center,
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: pw.EdgeInsets.all(8), // <-- CONST ELIMINADO
+                          child: pw.Text(prenda['detalles']),
+                        ),
+                        pw.Padding(
+                          padding: pw.EdgeInsets.all(8), // <-- CONST ELIMINADO
+                          child: pw.Text(
+                            '\$${prenda['subtotal'].toStringAsFixed(2)}',
+                            textAlign: pw.TextAlign.right,
+                          ),
+                        ),
+                      ],
+                    );
+                  }),
+                ),
+              ],
+            ),
 
-    final output = await getTemporaryDirectory();
-    final file = File("${output.path}/Orden_Produccion.pdf");
-    await file.writeAsBytes(await pdf.save());
-    await OpenFile.open(file.path);
+            pw.SizedBox(height: 24), // <-- CONST ELIMINADO
 
-    return await pdf.save();
-  }
+            // Total
+            pw.Container(
+              alignment: pw.Alignment.centerRight,
+              child: pw.Container(
+                width: 200,
+                padding: pw.EdgeInsets.all(12), // <-- CONST ELIMINADO
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey300),
+                  borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)), // <-- CONST ELIMINADO
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text('Total:'),
+                        pw.Text(
+                          '\$${pedidoData['total'].toStringAsFixed(2)}',
+                          style: pw.TextStyle(
+                            fontSize: 16,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            pw.SizedBox(height: 40), // <-- CONST ELIMINADO
+
+            // Notas
+            pw.Text(
+              'Notas:',
+              style: pw.TextStyle(
+                fontSize: 12,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
+            pw.SizedBox(height: 4), // <-- CONST ELIMINADO
+            pw.Text(
+              'Este es un documento generado automáticamente. Cualquier duda o aclaración, por favor contactar al departamento de producción.',
+              style: pw.TextStyle(fontSize: 10), // <-- CONST ELIMINADO
+            ),
+
+            // Pie de página
+            pw.Spacer(), // <-- CONST ELIMINADO
+            pw.Container(
+              alignment: pw.Alignment.center,
+              child: pw.Text(
+                'PersonalizaMe - Todos los derechos reservados',
+                style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700), // <-- CONST ELIMINADO
+              ),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+
+  return pdf.save();
+}
+
+// Función para generar un PDF de reporte general
+Future<Uint8List> generarPdfReporteGeneral(Map<String, dynamic> reporteData) async {
+  final pdf = pw.Document();
+
+  pdf.addPage(
+    pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      margin: pw.EdgeInsets.all(32), // <-- CONST ELIMINADO
+      build: (pw.Context context) {
+        return pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            // Encabezado
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'PersonalizaMe',
+                      style: pw.TextStyle(
+                        fontSize: 24,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.indigo,
+                      ),
+                    ),
+                    pw.SizedBox(height: 4), // <-- CONST ELIMINADO
+                    pw.Text(
+                      'Reporte de Producción',
+                      style: pw.TextStyle(
+                        fontSize: 16,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      'Fecha: ${DateTime.now().toString().split(' ')[0]}',
+                      style: pw.TextStyle(fontSize: 12), // <-- CONST ELIMINADO
+                    ),
+                  ],
+                ),
+              ],
+            ),
+
+            pw.SizedBox(height: 24), // <-- CONST ELIMINADO
+
+            // Resumen
+            pw.Container(
+              padding: pw.EdgeInsets.all(12), // <-- CONST ELIMINADO
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey300),
+                borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)), // <-- CONST ELIMINADO
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'Resumen de Pedidos',
+                    style: pw.TextStyle(
+                      fontSize: 16,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 8), // <-- CONST ELIMINADO
+                  pw.Text('Total de Pedidos: ${reporteData['totalPedidos']}'),
+                  pw.Text('Pedidos en Producción: ${reporteData['enProduccion']}'),
+                  pw.Text('Pedidos Terminados: ${reporteData['terminados']}'),
+                  pw.Text('Pedidos en Espera: ${reporteData['enEspera']}'),
+                ],
+              ),
+            ),
+
+            pw.SizedBox(height: 24), // <-- CONST ELIMINADO
+
+            // Lista de pedidos
+            pw.Text(
+              'Lista de Pedidos',
+              style: pw.TextStyle(
+                fontSize: 16,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
+            pw.SizedBox(height: 8), // <-- CONST ELIMINADO
+
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey300),
+              columnWidths: {
+                0: pw.FlexColumnWidth(1), // <-- CONST ELIMINADO
+                1: pw.FlexColumnWidth(3), // <-- CONST ELIMINADO
+                2: pw.FlexColumnWidth(2), // <-- CONST ELIMINADO
+                3: pw.FlexColumnWidth(2), // <-- CONST ELIMINADO
+              },
+              children: [
+                // Encabezado de la tabla
+                pw.TableRow(
+                  decoration: pw.BoxDecoration(color: PdfColors.grey200), // <-- CONST ELIMINADO
+                  children: [
+                    pw.Padding(
+                      padding: pw.EdgeInsets.all(8), // <-- CONST ELIMINADO
+                      child: pw.Text(
+                        'ID',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: pw.EdgeInsets.all(8), // <-- CONST ELIMINADO
+                      child: pw.Text(
+                        'Cliente',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: pw.EdgeInsets.all(8), // <-- CONST ELIMINADO
+                      child: pw.Text(
+                        'Estado',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: pw.EdgeInsets.all(8), // <-- CONST ELIMINADO
+                      child: pw.Text(
+                        'Total',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                        textAlign: pw.TextAlign.right,
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Filas de datos
+                ...List<pw.TableRow>.from(
+                  (reporteData['pedidos'] as List).map((pedido) {
+                    return pw.TableRow(
+                      children: [
+                        pw.Padding(
+                          padding: pw.EdgeInsets.all(8), // <-- CONST ELIMINADO
+                          child: pw.Text('#${pedido['id'].substring(0, 6)}'),
+                        ),
+                        pw.Padding(
+                          padding: pw.EdgeInsets.all(8), // <-- CONST ELIMINADO
+                          child: pw.Text(pedido['cliente']),
+                        ),
+                        pw.Padding(
+                          padding: pw.EdgeInsets.all(8), // <-- CONST ELIMINADO
+                          child: pw.Text(pedido['estado']),
+                        ),
+                        pw.Padding(
+                          padding: pw.EdgeInsets.all(8), // <-- CONST ELIMINADO
+                          child: pw.Text(
+                            '\$${pedido['total'].toStringAsFixed(2)}',
+                            textAlign: pw.TextAlign.right,
+                          ),
+                        ),
+                      ],
+                    );
+                  }),
+                ),
+              ],
+            ),
+
+            pw.SizedBox(height: 40), // <-- CONST ELIMINADO
+
+            // Pie de página
+            pw.Container(
+              alignment: pw.Alignment.center,
+              child: pw.Text(
+                'PersonalizaMe - Todos los derechos reservados',
+                style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700), // <-- CONST ELIMINADO
+              ),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+
+  return pdf.save();
 }

@@ -28,15 +28,13 @@ class PedidosScreen extends StatelessWidget {
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // CORREGIDO: Usar getters que ya existen
                       Text(
-                          'Items: ${order.items.length}\nSubtotal: \$${order.total.toStringAsFixed(2)}\nTiempo total: ${order.totalTiempoEstimado} min'),
+                          'Items: ${order.items.length}\nSubtotal: \$${order.totalPrecio.toStringAsFixed(2)}\nTiempo total: ${order.totalTiempoEstimado} min'),
                       const SizedBox(height: 4),
                       Row(
                         children: [
                           const Text('Estado: '),
                           Chip(
-                            // CORREGIDO: Usar status en lugar de estado y OrderStatus en lugar de OrderEstado
                             label: Text(order.status.name),
                             backgroundColor: _getEstadoColor(order.status),
                           ),
@@ -48,10 +46,8 @@ class PedidosScreen extends StatelessWidget {
                     icon: const Icon(Icons.arrow_forward),
                     tooltip: 'Avanzar estado',
                     onPressed: () {
-                      // CORREGIDO: Usar OrderStatus en lugar de OrderEstado
                       final currentIndex = OrderStatus.values.indexOf(order.status);
                       if (currentIndex < OrderStatus.values.length - 1) {
-                        // CORREGIDO: Crear nuevo pedido con estado actualizado
                         final updatedOrder = Order(
                           id: order.id,
                           clienteId: order.clienteId,
@@ -60,7 +56,6 @@ class PedidosScreen extends StatelessWidget {
                           items: order.items,
                           status: OrderStatus.values[currentIndex + 1],
                         );
-                        // CORREGIDO: Usar método updateOrder que ya existe
                         Provider.of<OrderProvider>(context, listen: false)
                             .updateOrder(updatedOrder);
                       }
@@ -109,20 +104,19 @@ class PedidosScreen extends StatelessWidget {
       ),
     );
   }
-}
 
-// CORREGIDO: Usar OrderStatus en lugar de OrderEstado
-Color _getEstadoColor(OrderStatus status) {
-  switch (status) {
-    case OrderStatus.EnEspera:
-      return Colors.grey.shade400;
-    case OrderStatus.EnProduccion:
-      return Colors.blue.shade300;
-    case OrderStatus.Pausado:
-      return Colors.orange.shade300;
-    case OrderStatus.Terminado:
-      return Colors.green.shade300;
-    case OrderStatus.Entregado:
-      return Colors.purple.shade300;
+  Color _getEstadoColor(OrderStatus status) {
+    switch (status) {
+      case OrderStatus.EnEspera:
+        return Colors.grey.shade400;
+      case OrderStatus.EnProduccion:
+        return Colors.blue.shade300;
+      case OrderStatus.Pausado:
+        return Colors.orange.shade300;
+      case OrderStatus.Terminado:
+        return Colors.green.shade300;
+      case OrderStatus.Entregado:
+        return Colors.purple.shade300;
+    }
   }
 }

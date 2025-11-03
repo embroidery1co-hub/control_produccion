@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/order_provider.dart';
-import 'providers/precio_provider.dart';
 import 'providers/tiempo_produccion_provider.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/pedidos_screen.dart';
 import 'screens/produccion_screen.dart';
 import 'screens/inventario_screen.dart';
 import 'screens/pdf_demo.dart';
+import 'providers/producto_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,8 +16,8 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => OrderProvider()),
-        ChangeNotifierProvider(create: (_) => PrecioProvider()),
         ChangeNotifierProvider(create: (_) => TiempoProduccionProvider()),
+        ChangeNotifierProvider(create: (_) => ProductoProvider()),
       ],
       child: const ControlProduccionApp(),
     ),

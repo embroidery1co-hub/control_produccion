@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models.dart';
 import '../providers/order_provider.dart';
-import '../providers/precio_provider.dart';
+import '../providers/producto_provider.dart';
 
 class NuevoPedidoScreen extends StatefulWidget {
   const NuevoPedidoScreen({super.key});
@@ -13,136 +13,134 @@ class NuevoPedidoScreen extends StatefulWidget {
 
 class _NuevoPedidoScreenState extends State<NuevoPedidoScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _clienteController = TextEditingController();
   final _fechaEntregaController = TextEditingController();
 
-  // Variables para el item actual
-  ItemTipo _tipoSeleccionado = ItemTipo.Bordado;
-  ItemTamano _tamanoSeleccionado = ItemTamano.Mediano;
+  // Variables para el formulario de items
+  Producto? _productoSeleccionado;
   final _ubicacionController = TextEditingController();
   final _cantidadController = TextEditingController(text: '1');
+  final _precioController = TextEditingController(); // NUEVO: Controller para el precio editable
 
+  String? _clienteSeleccionado; // Seguimos usando un cliente simple
   List<OrderItem> _items = [];
-  double _precioCalculado = 0.0;
-  int _tiempoEstimado = 0;
+
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fechaEntregaController.text =
+    DateTime.now().add(const Duration(days: 3)).toString().split(' ')[0];
+    // Seleccionar el primer producto por defecto si existe
+    final productoProvider = Provider.of<ProductoProvider>(
+        context, listen: false);
+    if (productoProvider.productos.isNotEmpty) {
+      _productoSeleccionado = productoProvider.productos.first;
+      _precioController.text = _productoSeleccionado!.precioBase.toString();
+    }
+  }
 
   @override
   void dispose() {
-    _clienteController.dispose();
     _fechaEntregaController.dispose();
     _ubicacionController.dispose();
     _cantidadController.dispose();
+    _precioController.dispose();
     super.dispose();
   }
 
-  void _calcularPrecioYTiempo() {
-    final precioProvider = Provider.of<PrecioProvider>(context, listen: false);
-
-    // Crear una variable de producto para buscar el precio
-    final variable = VariableProducto(
-      tipo: _tipoSeleccionado == ItemTipo.Bordado ? TipoBordado.Pecho : TipoBordado.Personalizado,
-      calidad: CalidadBordado.Simple,
-      cantidad: int.tryParse(_cantidadController.text) ?? 1,
-      clienteProporcionaPrenda: false,
-    );
-
-    final precio = precioProvider.buscarPrecio(variable);
-    if (precio != null) {
-      setState(() {
-        _precioCalculado = precio.calcularPrecioTotal(int.tryParse(_cantidadController.text) ?? 1);
-      });
-    }
-
-    // Calcular tiempo estimado según el tipo y tamaño
-    int tiempoBase = 0;
-    switch (_tipoSeleccionado) {
-      case ItemTipo.Bordado:
-        tiempoBase = 15;
-        break;
-      case ItemTipo.Estampado:
-        tiempoBase = 10;
-        break;
-      case ItemTipo.Serigrafia:
-        tiempoBase = 20;
-        break;
-    }
-
-    switch (_tamanoSeleccionado) {
-      case ItemTamano.Pequenyo:
-        tiempoBase = (tiempoBase * 0.8).round();
-        break;
-      case ItemTamano.Mediano:
-      // Mantener el tiempo base
-        break;
-      case ItemTamano.Grande:
-        tiempoBase = (tiempoBase * 1.5).round();
-        break;
-    }
-
-    setState(() {
-      _tiempoEstimado = tiempoBase;
-    });
-  }
-
   void _agregarItem() {
-    if (_formKey.currentState!.validate()) {
+    if (_formKey.currentState!.validate() && _productoSeleccionado != null &&
+        _clienteSeleccionado != null) {
       final cantidad = int.tryParse(_cantidadController.text) ?? 1;
+      final precioUnitario = double.tryParse(_precioController.text) ?? 0.0;
+
+      if (precioUnitario <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('El precio debe ser mayor que cero.')),
+        );
+        return;
+      }
 
       final nuevoItem = OrderItem(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        tipo: _tipoSeleccionado,
-        tamano: _tamanoSeleccionado,
+        id: DateTime
+            .now()
+            .millisecondsSinceEpoch
+            .toString(),
+        tipo: _mapProductoATipo(_productoSeleccionado!),
+        tamano: ItemTamano.Mediano,
         ubicacion: _ubicacionController.text,
         cantidad: cantidad,
-        precio: _precioCalculado / cantidad, // Precio unitario
-        tiempoEstimadoMin: _tiempoEstimado,
+        precio: precioUnitario,
+        tiempoEstimadoMin: _productoSeleccionado!.tiempoBaseMinutos,
       );
 
       setState(() {
         _items.add(nuevoItem);
-        // Limpiar formulario para el siguiente item
+        // Limpiar para el siguiente item, pero mantenemos el producto seleccionado
         _ubicacionController.clear();
         _cantidadController.text = '1';
-        _precioCalculado = 0.0;
-        _tiempoEstimado = 0;
+        _precioController.text = _productoSeleccionado!.precioBase
+            .toString(); // Reseteamos al precio base
       });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Por favor, completa todos los campos del item.')),
+      );
     }
   }
 
-  void _guardarPedido() {
-    if (_clienteController.text.isEmpty || _items.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Debes ingresar un cliente y al menos un item')),
+  ItemTipo _mapProductoATipo(Producto producto) {
+    if (producto.id.contains('bordado')) return ItemTipo.Bordado;
+    if (producto.id.contains('estampado')) return ItemTipo.Estampado;
+    return ItemTipo.Serigrafia;
+  }
+
+  void _guardarPedido() async {
+    if (_formKey.currentState!.validate() && _clienteSeleccionado != null &&
+        _items.isNotEmpty) {
+      setState(() => _isSaving = true);
+
+      final orderProvider = Provider.of<OrderProvider>(context, listen: false);
+      final nuevoPedido = Order(
+        id: DateTime
+            .now()
+            .millisecondsSinceEpoch
+            .toString(),
+        clienteId: _clienteSeleccionado!,
+        fechaRecepcion: DateTime.now(),
+        fechaEntregaEstim: DateTime.parse(_fechaEntregaController.text),
+        items: _items,
       );
-      return;
+
+      await orderProvider.addOrder(nuevoPedido);
+
+      if (mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('¡Pedido creado exitosamente!')),
+        );
+        Navigator.pop(context);
+      }
+    } else {
+      String mensajeError = '';
+      if (_clienteSeleccionado == null)
+        mensajeError = 'Debes seleccionar un cliente. ';
+      if (_items.isEmpty)
+        mensajeError += 'Debes añadir al menos un item al pedido.';
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(mensajeError)));
     }
-
-    final orderProvider = Provider.of<OrderProvider>(context, listen: false);
-
-    final nuevoPedido = Order(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      clienteId: _clienteController.text,
-      fechaRecepcion: DateTime.now(),
-      fechaEntregaEstim: DateTime.parse(_fechaEntregaController.text),
-      items: _items,
-    );
-
-    orderProvider.addOrder(nuevoPedido);
-
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Pedido creado exitosamente')),
-    );
   }
 
   Future<void> _seleccionarFecha() async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now().add(const Duration(days: 3)),
+      initialDate: DateTime.parse(_fechaEntregaController.text),
       firstDate: DateTime.now(),
       lastDate: DateTime(2101),
     );
-
     if (picked != null) {
       setState(() {
         _fechaEntregaController.text = picked.toIso8601String().split('T')[0];
@@ -150,238 +148,268 @@ class _NuevoPedidoScreenState extends State<NuevoPedidoScreen> {
     }
   }
 
+  // NUEVO: Método para actualizar el precio en el catálogo maestro
+  void _actualizarPrecioEnCatalogo() {
+    if (_productoSeleccionado == null) return;
+
+    final nuevoPrecio = double.tryParse(_precioController.text);
+    if (nuevoPrecio != null && nuevoPrecio > 0) {
+      final productoProvider = Provider.of<ProductoProvider>(
+          context, listen: false);
+      productoProvider.actualizarPrecioProducto(
+          _productoSeleccionado!.id, nuevoPrecio);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('¡Precio base de "${_productoSeleccionado!
+            .nombre}" actualizado a \$${nuevoPrecio.toStringAsFixed(2)}!')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final clienteProvider = Provider.of<OrderProvider>(
+        context); // Usamos OrderProvider para la lista de clientes de ejemplo
+    final productoProvider = Provider.of<ProductoProvider>(context);
+    final cantidad = int.tryParse(_cantidadController.text) ?? 1;
+    final precioUnitario = double.tryParse(_precioController.text) ?? 0.0;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Nuevo Pedido'),
-      ),
-      body: Form(
+          title: const Text('Crear Nuevo Pedido'), centerTitle: true),
+      body: _isSaving
+          ? const Center(child: CircularProgressIndicator())
+          : Form(
         key: _formKey,
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Datos del cliente
-              TextFormField(
-                controller: _clienteController,
-                decoration: const InputDecoration(
-                  labelText: 'Cliente',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Por favor ingresa el nombre del cliente';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Fecha de entrega estimada
-              TextFormField(
-                controller: _fechaEntregaController,
-                decoration: const InputDecoration(
-                  labelText: 'Fecha de Entrega Estimada',
-                  border: OutlineInputBorder(),
-                  suffixIcon: Icon(Icons.calendar_today),
-                ),
-                readOnly: true,
-                onTap: _seleccionarFecha,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Por favor selecciona una fecha de entrega';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 24),
-
-              // Detalles del item
-              const Text(
-                'Agregar Item',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-
-              // Tipo de item
-              DropdownButtonFormField<ItemTipo>(
-                value: _tipoSeleccionado,
-                decoration: const InputDecoration(
-                  labelText: 'Tipo',
-                  border: OutlineInputBorder(),
-                ),
-                items: ItemTipo.values.map((ItemTipo tipo) {
-                  return DropdownMenuItem<ItemTipo>(
-                    value: tipo,
-                    child: Text(tipo.name),
-                  );
-                }).toList(),
-                onChanged: (ItemTipo? newValue) {
-                  if (newValue != null) {
-                    setState(() {
-                      _tipoSeleccionado = newValue;
-                    });
-                    _calcularPrecioYTiempo();
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Tamaño del item
-              DropdownButtonFormField<ItemTamano>(
-                value: _tamanoSeleccionado,
-                decoration: const InputDecoration(
-                  labelText: 'Tamaño',
-                  border: OutlineInputBorder(),
-                ),
-                items: ItemTamano.values.map((ItemTamano tamano) {
-                  return DropdownMenuItem<ItemTamano>(
-                    value: tamano,
-                    child: Text(tamano.name),
-                  );
-                }).toList(),
-                onChanged: (ItemTamano? newValue) {
-                  if (newValue != null) {
-                    setState(() {
-                      _tamanoSeleccionado = newValue;
-                    });
-                    _calcularPrecioYTiempo();
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Ubicación
-              TextFormField(
-                controller: _ubicacionController,
-                decoration: const InputDecoration(
-                  labelText: 'Ubicación (ej: Pecho, Espalda)',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Por favor ingresa la ubicación';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Cantidad
-              TextFormField(
-                controller: _cantidadController,
-                decoration: const InputDecoration(
-                  labelText: 'Cantidad',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.number,
-                onChanged: (value) {
-                  _calcularPrecioYTiempo();
-                },
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Por favor ingresa la cantidad';
-                  }
-                  final cantidad = int.tryParse(value);
-                  if (cantidad == null || cantidad <= 0) {
-                    return 'Por favor ingresa una cantidad válida';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Precio y tiempo calculados
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Precio: \$${_precioCalculado.toStringAsFixed(2)}',
-                      style: const TextStyle(fontSize: 16),
-                    ),
+              // --- Sección 1: Datos del Cliente ---
+              _buildSectionCard('Datos del Cliente', [
+                // CÓDIGO CORREGIDO
+                DropdownButtonFormField<String>(
+                  value: _clienteSeleccionado,
+                  decoration: const InputDecoration(
+                    labelText: 'Seleccionar Cliente',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person),
                   ),
-                  Expanded(
-                    child: Text(
-                      'Tiempo: $_tiempoEstimado min',
-                      style: const TextStyle(fontSize: 16),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Botón para agregar item
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _agregarItem,
-                  child: const Text('Agregar Item'),
+                  items: clienteProvider.clientes.map((
+                      nombreCliente) { // <-- El parámetro es el nombre del cliente (un String)
+                    return DropdownMenuItem(
+                      value: nombreCliente,
+                      // <-- El valor es el String completo
+                      child: Text(nombreCliente), // <-- Mostramos el String
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _clienteSeleccionado = value;
+                    });
+                  },
+                  validator: (value) =>
+                  value == null
+                      ? 'Selecciona un cliente'
+                      : null,
                 ),
-              ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _fechaEntregaController,
+                  decoration: const InputDecoration(
+                    labelText: 'Fecha de Entrega',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.calendar_today),
+                  ),
+                  readOnly: true,
+                  onTap: _seleccionarFecha,
+                  validator: (value) =>
+                  value == null || value.isEmpty
+                      ? 'Selecciona una fecha'
+                      : null,
+                ),
+              ]),
               const SizedBox(height: 24),
 
-              // Lista de items agregados
-              const Text(
-                'Items Agregados',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-
-              _items.isEmpty
-                  ? const Center(child: Text('No hay items agregados'))
-                  : ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _items.length,
-                itemBuilder: (context, index) {
-                  final item = _items[index];
-                  return Card(
-                    child: ListTile(
-                      title: Text('${item.tipo.name} - ${item.tamano.name}'),
-                      subtitle: Text('${item.ubicacion} x${item.cantidad}'),
-                      trailing: Text('\$${item.subtotal.toStringAsFixed(2)}'),
-                      onLongPress: () {
-                        setState(() {
-                          _items.removeAt(index);
-                        });
-                      },
-                    ),
-                  );
-                },
-              ),
-
-              const SizedBox(height: 24),
-
-              // Total del pedido
-              if (_items.isNotEmpty)
+              // --- Sección 2: Agregar Items ---
+              _buildSectionCard('Agregar Item', [
+                DropdownButtonFormField<Producto>(
+                  value: _productoSeleccionado,
+                  decoration: const InputDecoration(
+                    labelText: 'Producto/Servicio',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.category),
+                  ),
+                  items: productoProvider.productos.map((producto) {
+                    return DropdownMenuItem(
+                      value: producto,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(producto.nombre,
+                              style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text('Base: \$${producto.precioBase.toStringAsFixed(
+                              0)}', style: TextStyle(color: Colors.grey[600])),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _productoSeleccionado = value;
+                      // Al cambiar el producto, actualizamos el campo de precio con su precio base
+                      _precioController.text = value?.precioBase.toString() ??
+                          '0';
+                    });
+                  },
+                  validator: (value) =>
+                  value == null
+                      ? 'Selecciona un producto'
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _ubicacionController,
+                  decoration: const InputDecoration(
+                    labelText: 'Ubicación (ej: Pecho, Espalda)',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.location_on),
+                  ),
+                  validator: (value) =>
+                  value == null || value.isEmpty
+                      ? 'Ingresa la ubicación'
+                      : null,
+                ),
+                const SizedBox(height: 16),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    Text(
-                      'Total: \$${_items.fold(0.0, (sum, item) => sum + item.subtotal).toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: TextFormField(
+                        controller: _cantidadController,
+                        decoration: const InputDecoration(
+                          labelText: 'Cantidad',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.add_shopping_cart),
+                        ),
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value == null || value.isEmpty)
+                            return 'Ingresa la cantidad';
+                          if (int.tryParse(value) == null ||
+                              int.parse(value) <= 0) return 'Cantidad inválida';
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    // NUEVO: Campo de precio editable
+                    Expanded(
+                      child: TextFormField(
+                        controller: _precioController,
+                        decoration: const InputDecoration(
+                          labelText: 'Precio Unitario',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.attach_money),
+                          suffixIcon: Icon(
+                              Icons.edit), // Icono para indicar que es editable
+                        ),
+                        keyboardType: TextInputType.numberWithOptions(
+                            decimal: true),
+                        onChanged: (value) => setState(() {}),
+                        // Forzar redibujado para actualizar el total
+                        validator: (value) {
+                          if (value == null || value.isEmpty)
+                            return 'Ingresa el precio';
+                          if (double.tryParse(value) == null ||
+                              double.parse(value) <= 0)
+                            return 'Precio inválido';
+                          return null;
+                        },
                       ),
                     ),
                   ],
                 ),
-
+                const SizedBox(height: 16),
+                _buildResumenCard('Precio Total Item',
+                    '\$${(precioUnitario * cantidad).toStringAsFixed(0)}'),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.add_circle_outline),
+                    label: const Text('Añadir a la lista'),
+                    onPressed: _agregarItem,
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade600,
+                        foregroundColor: Colors.white),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // NUEVO: Botón para actualizar el precio en el catálogo
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.update, color: Colors.orange),
+                  label: const Text('Actualizar Precio Base en el Catálogo',
+                      style: TextStyle(color: Colors.orange)),
+                  onPressed: _actualizarPrecioEnCatalogo,
+                ),
+              ]),
               const SizedBox(height: 24),
 
-              // Botón para guardar pedido
+              // --- Sección 3: Vista Previa del Pedido ---
+              if (_items.isNotEmpty) ...[
+                _buildSectionCard('Resumen del Pedido', [
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _items.length,
+                    itemBuilder: (context, index) {
+                      final item = _items[index];
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(
+                            Icons.check_circle, color: Colors.green),
+                        title: Text('${item.tipo.name}'),
+                        subtitle: Text(
+                            '${item.ubicacion} x${item.cantidad} @ \$${item
+                                .precio.toStringAsFixed(0)}'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('\$${item.subtotal.toStringAsFixed(0)}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold)),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(
+                                  Icons.delete_outline, color: Colors.red),
+                              onPressed: () =>
+                                  setState(() => _items.removeAt(index)),
+                              tooltip: 'Eliminar item',
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    separatorBuilder: (context, index) => const Divider(),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildTotalCard(),
+                ]),
+                const SizedBox(height: 24),
+              ],
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: _guardarPedido,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
+                    backgroundColor: Colors.indigo,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    textStyle: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold),
                   ),
-                  child: const Text('Guardar Pedido'),
+                  child: const Text('GUARDAR PEDIDO'),
                 ),
               ),
             ],
@@ -389,5 +417,47 @@ class _NuevoPedidoScreenState extends State<NuevoPedidoScreen> {
         ),
       ),
     );
+  }
+
+  // --- Widgets Helper (sin cambios) ---
+  Widget _buildSectionCard(String title, List<Widget> children) {
+    return Card(elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(padding: const EdgeInsets.all(16.0),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme
+                      .of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  ...children
+                ])));
+  }
+
+  Widget _buildResumenCard(String label, String value) {
+    return Card(color: Colors.grey.shade100,
+        child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(label,
+                      style: const TextStyle(fontWeight: FontWeight.w500)),
+                  Text(value,
+                      style: const TextStyle(fontWeight: FontWeight.bold))
+                ])));
+  }
+
+  Widget _buildTotalCard() {
+    final total = _items.fold(0.0, (sum, item) => sum + item.subtotal);
+    return Card(color: Colors.green.shade50,
+        elevation: 3,
+        child: ListTile(title: const Text(
+            'Total del Pedido', style: TextStyle(fontWeight: FontWeight.bold)),
+            trailing: Text('\$${total.toStringAsFixed(2)}', style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: Colors.green.shade700))));
   }
 }

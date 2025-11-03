@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models.dart';
 import '../providers/order_provider.dart';
+import 'nuevo_pedido_screen.dart';
 
 class PedidosScreen extends StatelessWidget {
   const PedidosScreen({super.key});
@@ -68,39 +69,14 @@ class PedidosScreen extends StatelessWidget {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        child: const Icon(Icons.add),
         onPressed: () {
-          // Crear un pedido de prueba
-          final newOrder = Order(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            clienteId: 'ClientePrueba',
-            fechaRecepcion: DateTime.now(),
-            fechaEntregaEstim: DateTime.now().add(const Duration(days: 3)),
-            items: [
-              OrderItem(
-                id: 'item1',
-                tipo: ItemTipo.Bordado,
-                tamano: ItemTamano.Mediano,
-                ubicacion: 'Frente',
-                cantidad: 2,
-                precio: 25.0,
-                tiempoEstimadoMin: 15,
-              ),
-              OrderItem(
-                id: 'item2',
-                tipo: ItemTipo.Estampado,
-                tamano: ItemTamano.Grande,
-                ubicacion: 'Espalda',
-                cantidad: 1,
-                precio: 40.0,
-                tiempoEstimadoMin: 20,
-              ),
-            ],
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const NuevoPedidoScreen()),
           );
-
-          Provider.of<OrderProvider>(context, listen: false)
-              .addOrder(newOrder);
         },
+        child: const Icon(Icons.add),
+        tooltip: 'Crear Nuevo Pedido',
       ),
     );
   }

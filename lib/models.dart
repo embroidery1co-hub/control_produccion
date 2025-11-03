@@ -2,28 +2,32 @@ import 'package:flutter/foundation.dart';
 
 // Enum para tipos de items
 enum ItemTipo { Bordado, Estampado, Serigrafia }
+extension ItemTipoExtension on ItemTipo {
+  String get nombre {
+    switch (this) {
+      case ItemTipo.Bordado: return 'Bordado';
+      case ItemTipo.Estampado: return 'Estampado';
+      case ItemTipo.Serigrafia: return 'Serigrafía';
+    }
+  }
+}
 
 // Enum para tamaños
 enum ItemTamano { Pequenyo, Mediano, Grande }
+extension ItemTamanoExtension on ItemTamano {
+  String get nombre {
+    switch (this) {
+      case ItemTamano.Pequenyo: return 'Pequeño';
+      case ItemTamano.Mediano: return 'Mediano';
+      case ItemTamano.Grande: return 'Grande';
+    }
+  }
+}
 
 // Enum para estados de pedido
 enum OrderStatus { EnEspera, EnProduccion, Pausado, Terminado, Entregado }
 
-// Enum para tipos de bordado
-enum TipoBordado {
-  Pecho,
-  Espalda,
-  Manga,
-  Completo,
-  Personalizado
-}
-
-// Enum para calidad de bordado
-enum CalidadBordado {
-  Simple,
-  Doble,
-  Premium
-}
+// --- MODELOS PRINCIPALES ---
 
 class OrderItem {
   final String id;
@@ -46,9 +50,6 @@ class OrderItem {
 
   // Getter para calcular subtotal
   double get subtotal => precio * cantidad;
-
-  // Getter para calcular tiempo total
-  int get totalTiempo => tiempoEstimadoMin * cantidad;
 }
 
 class Order {
@@ -71,7 +72,7 @@ class Order {
   });
 
   // Calcular total del pedido
-  double get total => items.fold(0, (sum, item) => sum + (item.precio * item.cantidad));
+  double get total => items.fold(0, (sum, item) => sum + item.subtotal);
 
   // Alias para total (para compatibilidad con tu código)
   double get totalPrecio => total;
@@ -80,42 +81,41 @@ class Order {
   int get totalTiempoEstimado => items.fold(0, (sum, item) => sum + item.tiempoEstimadoMin);
 }
 
-class VariableProducto {
-  final TipoBordado tipo;
-  final CalidadBordado calidad;
-  final int cantidad;
-  final bool clienteProporcionaPrenda;
+// --- NUEVO MODELO PARA EL CATÁLOGO ---
 
-  VariableProducto({
-    required this.tipo,
-    required this.calidad,
-    required this.cantidad,
-    required this.clienteProporcionaPrenda,
-  });
-
-  // Para identificar combinaciones únicas
-  String get id => '${tipo.name}_${calidad.name}_${cantidad}_${clienteProporcionaPrenda}';
-}
-
-class PrecioVariable {
+class Producto {
   final String id;
-  final String nombreProducto;
-  final VariableProducto variable;
-  final double precioBase;
-  final double precioAdicionalPorUnidad;
+  final String nombre;
+  final String descripcion;
+  double precioBase; // Mutable para poder editarlo
+  final int tiempoBaseMinutos;
 
-  PrecioVariable({
+  Producto({
     required this.id,
-    required this.nombreProducto,
-    required this.variable,
+    required this.nombre,
+    required this.descripcion,
     required this.precioBase,
-    required this.precioAdicionalPorUnidad,
+    required this.tiempoBaseMinutos,
   });
-
-  double calcularPrecioTotal(int cantidad) {
-    return precioBase + (precioAdicionalPorUnidad * (cantidad - 1));
-  }
 }
+
+// --- MODELO PARA CLIENTES (Opcional, pero bueno para tener) ---
+
+class Cliente {
+  final String id;
+  final String nombre;
+  final String telefono;
+  final String email;
+
+  Cliente({
+    required this.id,
+    required this.nombre,
+    this.telefono = '',
+    this.email = '',
+  });
+}
+
+// --- MODELO PARA TIEMPO DE PRODUCCIÓN (Sin cambios) ---
 
 class TiempoProduccion {
   final String id;

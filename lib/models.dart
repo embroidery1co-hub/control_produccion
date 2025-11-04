@@ -25,7 +25,117 @@ extension ItemTamanoExtension on ItemTamano {
 }
 
 // Enum para estados de pedido
-enum OrderStatus { EnEspera, EnProduccion, Pausado, Terminado, Entregado }
+enum OrderStatus {
+  EnEspera,
+  EnProduccion,
+  Pausado,
+  Terminado,
+  Entregado,
+  Archivado // <-- NUEVO ESTADO
+}
+
+// --- MODELOS PARA EL MÓDULO DE CAJA ---
+
+class CajaDiaria {
+  final String id;
+  final DateTime fecha;
+  double saldoInicial;
+  double saldoFinal;
+  double totalVentas; // Suma de los pedidos pagados en el día
+  double totalEntradas;
+  double totalSalidas;
+  bool estaCerrada;
+
+  CajaDiaria({
+    required this.id,
+    required this.fecha,
+    required this.saldoInicial,
+    this.saldoFinal = 0.0,
+    this.totalVentas = 0.0,
+    this.totalEntradas = 0.0,
+    this.totalSalidas = 0.0,
+    this.estaCerrada = false,
+  });
+
+  // AÑADE ESTE MÉTODO
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'fecha': fecha.toIso8601String(),
+      'saldoInicial': saldoInicial,
+      'saldoFinal': saldoFinal,
+      'totalVentas': totalVentas,
+      'totalEntradas': totalEntradas,
+      'totalSalidas': totalSalidas,
+      'estaCerrada': estaCerrada ? 1 : 0,
+    };
+  }
+
+  // AÑADE ESTE CONSTRUCTOR FACTORY
+  factory CajaDiaria.fromMap(Map<String, dynamic> map) {
+    return CajaDiaria(
+      id: map['id'],
+      fecha: DateTime.parse(map['fecha']),
+      saldoInicial: map['saldoInicial'],
+      saldoFinal: map['saldoFinal'],
+      totalVentas: map['totalVentas'],
+      totalEntradas: map['totalEntradas'],
+      totalSalidas: map['totalSalidas'],
+      estaCerrada: map['estaCerrada'] == 1,
+    );
+  }
+
+  // Getter para calcular el saldo final teórico
+  double get saldoCalculado => saldoInicial + totalVentas + totalEntradas - totalSalidas;
+}
+
+class MovimientoCaja {
+  final String id;
+  final String cajaDiariaId;
+  final DateTime fechaHora;
+  final String concepto;
+  final double monto;
+  final TipoMovimiento tipo;
+  final String? referenciaId; // ID del pedido, si el movimiento es una venta
+
+  MovimientoCaja({
+    required this.id,
+    required this.cajaDiariaId,
+    required this.fechaHora,
+    required this.concepto,
+    required this.monto,
+    required this.tipo,
+    this.referenciaId,
+  });
+
+  // AÑADE ESTE MÉTODO
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'cajaDiariaId': cajaDiariaId,
+      'fechaHora': fechaHora.toIso8601String(),
+      'concepto': concepto,
+      'monto': monto,
+      'tipo': tipo.name,
+      'referenciaId': referenciaId,
+    };
+  }
+
+  // AÑADE ESTE CONSTRUCTOR FACTORY
+  factory MovimientoCaja.fromMap(Map<String, dynamic> map) {
+    return MovimientoCaja(
+      id: map['id'],
+      cajaDiariaId: map['cajaDiariaId'],
+      fechaHora: DateTime.parse(map['fechaHora']),
+      concepto: map['concepto'],
+      monto: map['monto'],
+      tipo: TipoMovimiento.values.byName(map['tipo']),
+      referenciaId: map['referenciaId'],
+    );
+  }
+}
+
+enum TipoMovimiento { Entrada, Salida, Venta }
 
 // --- MODELOS PRINCIPALES ---
 

@@ -31,31 +31,34 @@ class DatabaseHelper {
 
   Future _onCreate(Database db, int version) async {
     // Formato de fecha para SQLite: YYYY-MM-DD HH:MM:SS
-    final dateFormat = DateFormat('yyyy-MM-dd HH:mm:ss');
+    final dateFormat =
+    DateFormat('yyyy-MM-dd HH:mm:ss');
 
     // Tabla para los Pedidos
     await db.execute('''
-      CREATE TABLE orders(
-        id TEXT PRIMARY KEY,
-        cliente_id TEXT,
-        fecha_recepcion TEXT NOT NULL,
-        fecha_entrega_estim TEXT NOT NULL,
-        status TEXT NOT NULL
+      CREATE TABLE caja_diaria(
+      id TEXT PRIMARY KEY,
+      fecha TEXT NOT NULL,
+      saldoInicial REAL NOT NULL,
+      saldoFinal REAL NOT NULL DEFAULT 0.0,
+      totalVentas REAL NOT NULL DEFAULT 0.0,
+      totalEntradas REAL NOT NULL DEFAULT 0.0,
+      totalSalidas REAL NOT NULL DEFAULT 0.0,
+      estaCerrada INTEGER NOT NULL DEFAULT 0
       )
     ''');
 
     // Tabla para los Items de cada Pedido
     await db.execute('''
-      CREATE TABLE order_items(
-        id TEXT PRIMARY KEY,
-        order_id TEXT NOT NULL,
-        tipo TEXT NOT NULL,
-        tamano TEXT NOT NULL,
-        ubicacion TEXT NOT NULL,
-        cantidad INTEGER NOT NULL,
-        precio REAL NOT NULL,
-        tiempo_estimado_min INTEGER NOT NULL,
-        FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE
+      CREATE TABLE movimientos_caja(
+      id TEXT PRIMARY KEY,
+      cajaDiariaId TEXT NOT NULL,
+      fechaHora TEXT NOT NULL,
+      concepto TEXT NOT NULL,
+      monto REAL NOT NULL,
+      tipo TEXT NOT NULL,
+      referenciaId TEXT,
+      FOREIGN KEY (cajaDiariaId) REFERENCES caja_diaria (id) ON DELETE CASCADE
       )
     ''');
 
@@ -265,6 +268,66 @@ class DatabaseHelper {
       },
       where: 'order_id = ?',
       whereArgs: [tiempo.orderId],
+    );
+  }
+  // --- MÉTODOS PARA LA CAJA ---
+
+// Obtener la caja de una fecha específica
+  Future<CajaDiaria?> obtenerCajaPorFecha(DateTime fecha) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'caja_diaria',
+      where: 'fecha = ?',
+      whereArgs: [fecha.toIso8601String()],
+    );
+    if (maps.isNotEmpty) {
+      return CajaDiaria.fromMap(maps.first);
+    }
+    return null;
+  }
+
+// Insertar una nueva caja
+  Future<void> insertarCaja(CajaDiaria caja) async {
+    final db = await database;
+    await db.insert(
+      'caja_diaria',
+      caja.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+// Actualizar una caja existente
+  Future<void> actualizarCaja(CajaDiaria caja) async {
+    final db = await database;
+    await db.update(
+      'caja_diaria',
+      caja.toMap(),
+      where: 'id = ?',
+      whereArgs: [caja.id],
+    );
+  }
+
+// Obtener movimientos de una caja por su ID
+  Future<List<MovimientoCaja>> obtenerMovimientosPorCajaId(String cajaId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'movimientos_caja',
+      where: 'cajaDiariaId = ?',
+      whereArgs: [cajaId],
+      orderBy: 'fechaHora DESC',
+    );
+    return List.generate(maps.length, (i) {
+      return MovimientoCaja.fromMap(maps[i]);
+    });
+  }
+
+// Insertar un nuevo movimiento
+  Future<void> insertarMovimiento(MovimientoCaja movimiento) async {
+    final db = await database;
+    await db.insert(
+      'movimientos_caja',
+      movimiento.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 }

@@ -4,8 +4,11 @@ import '../models.dart';
 import '../providers/order_provider.dart';
 import '../providers/producto_provider.dart';
 
+
 class NuevoPedidoScreen extends StatefulWidget {
-  const NuevoPedidoScreen({super.key});
+  final Order? orderParaEditar; // <-- Hacerlo opcional (?)
+
+  const NuevoPedidoScreen({super.key,this.orderParaEditar});
 
   @override
   State<NuevoPedidoScreen> createState() => _NuevoPedidoScreenState();
@@ -24,20 +27,54 @@ class _NuevoPedidoScreenState extends State<NuevoPedidoScreen> {
   String? _clienteSeleccionado; // Seguimos usando un cliente simple
   List<OrderItem> _items = [];
 
+  double _precioUnitarioCalculado = 0.0;
+  int _tiempoUnitarioCalculado = 0;
+  String _nombreReglaAplicada = 'Precio Estándar';
+
   bool _isSaving = false;
+
+
+  // En la clase _NuevoPedidoScreenState dentro de nuevo_pedido_screen.dart
 
   @override
   void initState() {
     super.initState();
-    _fechaEntregaController.text =
-    DateTime.now().add(const Duration(days: 3)).toString().split(' ')[0];
-    // Seleccionar el primer producto por defecto si existe
-    final productoProvider = Provider.of<ProductoProvider>(
-        context, listen: false);
-    if (productoProvider.productos.isNotEmpty) {
-      _productoSeleccionado = productoProvider.productos.first;
-      _precioController.text = _productoSeleccionado!.precioBase.toString();
+
+    final order = widget.orderParaEditar; // Acceder al widget para obtener el pedido
+
+    if (order != null) {
+      // Si estamos editando, precargamos los datos del pedido
+      _clienteSeleccionado = order.clienteId;
+      _fechaEntregaController.text = order.fechaEntregaEstim.toString().split(' ')[0];
+      _items = List<OrderItem>.from(order.items); // Hacemos una copia de la lista de items
+    } else {
+      // Si es un pedido nuevo, usamos los valores por defecto
+      _fechaEntregaController.text = DateTime.now().add(const Duration(days: 3)).toString().split(' ')[0];
+      final productoProvider = Provider.of<ProductoProvider>(context, listen: false);
+      if (productoProvider.productos.isNotEmpty) {
+        _productoSeleccionado = productoProvider.productos.first;
+        _precioController.text = _productoSeleccionado!.precioBase.toString();
+      }
     }
+    _calcularValores(); // Calcular valores iniciales
+  }
+
+  // En lib/screens/nuevo_pedido_screen.dart, dentro de la clase _NuevoPedidoScreenState
+
+  void _calcularValores() {
+    if (_productoSeleccionado == null || _clienteSeleccionado == null) return;
+
+    final cantidad = int.tryParse(_cantidadController.text) ?? 1;
+    final precioUnitario = double.tryParse(_precioController.text) ?? 0.0;
+
+    setState(() {
+      // No necesitamos una lógica compleja aquí, solo usamos el precio del controlador
+      // ya que el usuario puede editarlo libremente.
+      // El tiempo se toma del producto seleccionado.
+      _precioUnitarioCalculado = precioUnitario;
+      _tiempoUnitarioCalculado = _productoSeleccionado?.tiempoBaseMinutos ?? 0;
+      _nombreReglaAplicada = 'Precio personalizado'; // O cualquier texto que quieras
+    });
   }
 
   @override

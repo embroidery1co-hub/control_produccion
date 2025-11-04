@@ -3,19 +3,38 @@ import 'package:provider/provider.dart';
 import '../models.dart';
 import '../providers/order_provider.dart';
 import 'nuevo_pedido_screen.dart';
+import 'pedido_detail_screen.dart';
+import 'historial_screen.dart'; // <-- Asegúrate de tener esta importación
 
 class PedidosScreen extends StatelessWidget {
   const PedidosScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Scaffold( // <-- 1. Envuelve todo en un Scaffold
+      appBar: AppBar( // <-- 2. Añade el AppBar aquí
+        title: const Text('Pedidos Activos'),
+        centerTitle: true,
+        actions: [
+          // Botón para ir al historial
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'Ver Historial de Pedidos',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const HistorialScreen()),
+              );
+            },
+          ),
+        ],
+      ),
       body: Consumer<OrderProvider>(
         builder: (context, orderProvider, child) {
-          final orders = orderProvider.orders;
+          final orders = orderProvider.orders.where((order) => order.status != OrderStatus.Archivado).toList();
 
           if (orders.isEmpty) {
-            return const Center(child: Text('No hay pedidos'));
+            return const Center(child: Text('No hay pedidos activos.')); // Mensaje un poco más claro
           }
 
           return ListView.builder(
@@ -25,7 +44,15 @@ class PedidosScreen extends StatelessWidget {
               return Card(
                 margin: const EdgeInsets.all(8),
                 child: ListTile(
-                  title: Text('Pedido ${order.id} - Cliente ${order.clienteId}'),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => PedidoDetailScreen(order: order),
+                      ),
+                    );
+                  },
+                  title: Text('Pedido #${order.id.substring(0, 6)} - ${order.clienteId}'),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -45,21 +72,14 @@ class PedidosScreen extends StatelessWidget {
                   ),
                   trailing: IconButton(
                     icon: const Icon(Icons.arrow_forward),
-                    tooltip: 'Avanzar estado',
+                    tooltip: 'Ver detalles',
                     onPressed: () {
-                      final currentIndex = OrderStatus.values.indexOf(order.status);
-                      if (currentIndex < OrderStatus.values.length - 1) {
-                        final updatedOrder = Order(
-                          id: order.id,
-                          clienteId: order.clienteId,
-                          fechaRecepcion: order.fechaRecepcion,
-                          fechaEntregaEstim: order.fechaEntregaEstim,
-                          items: order.items,
-                          status: OrderStatus.values[currentIndex + 1],
-                        );
-                        Provider.of<OrderProvider>(context, listen: false)
-                            .updateOrder(updatedOrder);
-                      }
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => PedidoDetailScreen(order: order),
+                        ),
+                      );
                     },
                   ),
                 ),
@@ -68,7 +88,7 @@ class PedidosScreen extends StatelessWidget {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton( // <-- 3. Añade el FAB aquí
         onPressed: () {
           Navigator.push(
             context,
@@ -81,6 +101,7 @@ class PedidosScreen extends StatelessWidget {
     );
   }
 
+  // Asegúrate de que esta función esté aquí y corregida
   Color _getEstadoColor(OrderStatus status) {
     switch (status) {
       case OrderStatus.EnEspera:
@@ -93,6 +114,25 @@ class PedidosScreen extends StatelessWidget {
         return Colors.green.shade300;
       case OrderStatus.Entregado:
         return Colors.purple.shade300;
+      case OrderStatus.Archivado: // <-- AÑADIDO
+        return Colors.brown.shade300;
+    }
+  }
+
+  String _getSiguientePasoTexto(OrderStatus status) {
+    switch (status) {
+      case OrderStatus.EnEspera:
+        return 'INICIAR PRODUCCIÓN';
+      case OrderStatus.EnProduccion:
+        return 'MARCAR COMO TERMINADO';
+      case OrderStatus.Pausado:
+        return 'REANUDAR PRODUCCIÓN';
+      case OrderStatus.Terminado:
+        return 'MARCAR COMO ENTREGADO';
+      case OrderStatus.Entregado:
+        return 'ARCHIVAR PEDIDO';
+      case OrderStatus.Archivado: // <-- AÑADE ESTE CASE
+        return 'YA ARCHIVADO'; // O cualquier texto que indique que no se puede hacer nada
     }
   }
 }

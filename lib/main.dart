@@ -5,9 +5,10 @@ import 'providers/tiempo_produccion_provider.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/pedidos_screen.dart';
 import 'screens/produccion_screen.dart';
-import 'screens/inventario_screen.dart';
+import 'screens/caja_screen.dart';
 import 'screens/pdf_demo.dart';
 import 'providers/producto_provider.dart';
+import 'providers/caja_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,6 +19,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => OrderProvider()),
         ChangeNotifierProvider(create: (_) => TiempoProduccionProvider()),
         ChangeNotifierProvider(create: (_) => ProductoProvider()),
+        ChangeNotifierProvider(create: (_) => CajaProvider()),
       ],
       child: const ControlProduccionApp(),
     ),
@@ -33,7 +35,7 @@ class ControlProduccionApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Control de Producción',
       theme: ThemeData(primarySwatch: Colors.indigo, useMaterial3: true),
-      home: const HomeScreen(),
+      home: const HomeScreen(), //<-- La pantalla principal es HomeScreen
     );
   }
 }
@@ -52,14 +54,14 @@ class _HomeScreenState extends State<HomeScreen> {
     DashboardScreen(),
     PedidosScreen(),
     ProduccionScreen(),
-    InventarioScreen(),
+    CajaScreen(),
   ];
 
   final List<String> _titles = const [
     "Dashboard",
     "Pedidos",
     "Producción",
-    "Inventario",
+    "Caja Diaria",
   ];
 
   @override
@@ -80,7 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
           BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
           BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Pedidos'),
           BottomNavigationBarItem(icon: Icon(Icons.precision_manufacturing), label: 'Producción'),
-          BottomNavigationBarItem(icon: Icon(Icons.inventory), label: 'Inventario'),
+          BottomNavigationBarItem(icon: Icon(Icons.point_of_sale), label: 'Caja'),
         ],
       ),
     );

@@ -17,10 +17,12 @@ class NuevoPedidoScreen extends StatefulWidget {
 class _NuevoPedidoScreenState extends State<NuevoPedidoScreen> {
   final _formKey = GlobalKey<FormState>();
   final _fechaEntregaController = TextEditingController();
+  final _observacionesController = TextEditingController();
 
   // Variables para el formulario de items
   Producto? _productoSeleccionado;
   final _ubicacionController = TextEditingController();
+
   final _cantidadController = TextEditingController(text: '1');
   final _precioController = TextEditingController(); // NUEVO: Controller para el precio editable
 
@@ -107,6 +109,7 @@ class _NuevoPedidoScreenState extends State<NuevoPedidoScreen> {
         tipo: _mapProductoATipo(_productoSeleccionado!),
         tamano: ItemTamano.Mediano,
         ubicacion: _ubicacionController.text,
+        observaciones: _observacionesController.text,
         cantidad: cantidad,
         precio: precioUnitario,
         tiempoEstimadoMin: _productoSeleccionado!.tiempoBaseMinutos,
@@ -171,6 +174,63 @@ class _NuevoPedidoScreenState extends State<NuevoPedidoScreen> {
     }
   }
 
+  // En lib/screens/nuevo_pedido_screen.dart
+// Dentro de la clase _NuevoPedidoScreenState
+
+  void _crearPedidoDirecto() {
+    // 1. Validar que los datos básicos estén completos
+    if (_formKey.currentState!.validate() && _productoSeleccionado != null && _clienteSeleccionado != null) {
+
+      // 2. Obtener los valores de los controllers
+      final cantidad = int.tryParse(_cantidadController.text) ?? 1;
+      final precioUnitario = double.tryParse(_precioController.text) ?? 0.0;
+
+      // 3. Validar que el precio sea válido
+      if (precioUnitario <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('El precio debe ser mayor que cero.')),
+        );
+        return;
+      }
+
+      // 4. Crear el OrderItem directamente
+      final itemDirecto = OrderItem(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        tipo: _mapProductoATipo(_productoSeleccionado!),
+        tamano: ItemTamano.Mediano, // Puedes añadir un selector de tamaño aquí si quieres
+        ubicacion: _ubicacionController.text,
+        observaciones: _observacionesController.text,
+        cantidad: cantidad,
+        precio: precioUnitario,
+        tiempoEstimadoMin: _productoSeleccionado!.tiempoBaseMinutos,
+      );
+
+      // 5. Crear el objeto Order con el item dentro
+      final pedidoDirecto = Order(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        clienteId: _clienteSeleccionado!,
+        fechaRecepcion: DateTime.now(),
+        fechaEntregaEstim: DateTime.parse(_fechaEntregaController.text),
+        items: [itemDirecto], // La lista de items solo tiene un elemento
+      );
+
+      // 6. Guardar el pedido usando el Provider
+      final orderProvider = Provider.of<OrderProvider>(context, listen: false);
+      orderProvider.addOrder(pedidoDirecto);
+
+      // 7. Mostrar un mensaje de éxito y cerrar la pantalla
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('¡Pedido de una sola prenda creado exitosamente!')),
+      );
+      Navigator.pop(context);
+    } else {
+      // 8. Si la validación falla, mostrar un mensaje de error
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor, selecciona un cliente y un producto para crear el pedido directamente.')),
+      );
+    }
+  }
+
   Future<void> _seleccionarFecha() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -185,7 +245,7 @@ class _NuevoPedidoScreenState extends State<NuevoPedidoScreen> {
     }
   }
 
-  // NUEVO: Método para actualizar el precio en el catálogo maestro
+  // NUEVO: Metodo para actualizar el precio en el catálogo maestro
   void _actualizarPrecioEnCatalogo() {
     if (_productoSeleccionado == null) return;
 
@@ -269,6 +329,18 @@ class _NuevoPedidoScreenState extends State<NuevoPedidoScreen> {
               ]),
               const SizedBox(height: 24),
 
+              // AQUÍ ES DONDE VA EL BOTÓN
+              ElevatedButton.icon(
+                icon: const Icon(Icons.fast_forward),
+                label: const Text('Crear Pedido Directamente'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green.shade600,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: _crearPedidoDirecto, // Este método lo crearemos a continuación
+              ),
+              const SizedBox(height: 24), // Espacio antes de la siguiente sección
+
               // --- Sección 2: Agregar Items ---
               _buildSectionCard('Agregar Item', [
                 DropdownButtonFormField<Producto>(
@@ -311,12 +383,11 @@ class _NuevoPedidoScreenState extends State<NuevoPedidoScreen> {
                   decoration: const InputDecoration(
                     labelText: 'Ubicación (ej: Pecho, Espalda)',
                     border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.location_on),
+                    prefixIcon: Icon(Icons.accessibility), // Icon de prenda/mannequin
                   ),
-                  validator: (value) =>
-                  value == null || value.isEmpty
-                      ? 'Ingresa la ubicación'
-                      : null,
+                  validator: (value) {
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 16),
                 Row(
@@ -333,14 +404,26 @@ class _NuevoPedidoScreenState extends State<NuevoPedidoScreen> {
                         validator: (value) {
                           if (value == null || value.isEmpty)
                             return 'Ingresa la cantidad';
-                          if (int.tryParse(value) == null ||
-                              int.parse(value) <= 0) return 'Cantidad inválida';
+                          if (int.tryParse(value) == null || int.parse(value) <= 0)
+                            return 'Cantidad inválida';
                           return null;
                         },
                       ),
                     ),
                     const SizedBox(width: 16),
-                    // NUEVO: Campo de precio editable
+                    // Campo de observaciones (CORREGIDO)
+                    Expanded(
+                      child: TextFormField( // <-- CAMBIA A TextFormField
+                        controller: _observacionesController,
+                        decoration: const InputDecoration(
+                          labelText: 'Observaciones (Opcional)',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.notes),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    // Campo de precio editable (CORREGIDO)
                     Expanded(
                       child: TextFormField(
                         controller: _precioController,
@@ -348,18 +431,14 @@ class _NuevoPedidoScreenState extends State<NuevoPedidoScreen> {
                           labelText: 'Precio Unitario',
                           border: OutlineInputBorder(),
                           prefixIcon: Icon(Icons.attach_money),
-                          suffixIcon: Icon(
-                              Icons.edit), // Icono para indicar que es editable
+                          suffixIcon: Icon(Icons.edit),
                         ),
-                        keyboardType: TextInputType.numberWithOptions(
-                            decimal: true),
+                        keyboardType: TextInputType.numberWithOptions(decimal: true),
                         onChanged: (value) => setState(() {}),
-                        // Forzar redibujado para actualizar el total
                         validator: (value) {
                           if (value == null || value.isEmpty)
                             return 'Ingresa el precio';
-                          if (double.tryParse(value) == null ||
-                              double.parse(value) <= 0)
+                          if (double.tryParse(value) == null || double.parse(value) <= 0)
                             return 'Precio inválido';
                           return null;
                         },

@@ -144,6 +144,7 @@ class OrderItem {
   final ItemTipo tipo;
   final ItemTamano tamano;
   final String ubicacion;
+  final String observaciones;
   final int cantidad;
   final double precio;
   final int tiempoEstimadoMin;
@@ -153,6 +154,7 @@ class OrderItem {
     required this.tipo,
     required this.tamano,
     required this.ubicacion,
+    this.observaciones = '',
     required this.cantidad,
     required this.precio,
     required this.tiempoEstimadoMin,

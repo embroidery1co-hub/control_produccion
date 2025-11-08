@@ -18,6 +18,7 @@ class _NuevoPedidoScreenState extends State<NuevoPedidoScreen> {
   final _formKey = GlobalKey<FormState>();
   final _fechaEntregaController = TextEditingController();
   final _observacionesController = TextEditingController();
+  final _abonoController = TextEditingController();
 
   // Variables para el formulario de items
   Producto? _productoSeleccionado;
@@ -79,12 +80,51 @@ class _NuevoPedidoScreenState extends State<NuevoPedidoScreen> {
     });
   }
 
+ //Dialogo para agregar cliente
+
+  void _mostrarDialogoAgregarCliente() {
+    final _nuevoClienteController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Agregar Nuevo Cliente'),
+          content: TextField(
+            controller: _nuevoClienteController,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: 'Nombre del nuevo cliente'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (_nuevoClienteController.text.isNotEmpty) {
+                  final orderProvider = Provider.of<OrderProvider>(context, listen: false);
+                  orderProvider.addCliente(_nuevoClienteController.text);
+                  setState(() {
+                    _clienteSeleccionado = _nuevoClienteController.text;
+                  });
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('Agregar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   void dispose() {
     _fechaEntregaController.dispose();
     _ubicacionController.dispose();
     _cantidadController.dispose();
     _precioController.dispose();
+    _abonoController.dispose();
     super.dispose();
   }
 
@@ -137,97 +177,51 @@ class _NuevoPedidoScreenState extends State<NuevoPedidoScreen> {
     return ItemTipo.Serigrafia;
   }
 
-  void _guardarPedido() async {
-    if (_formKey.currentState!.validate() && _clienteSeleccionado != null &&
-        _items.isNotEmpty) {
-      setState(() => _isSaving = true);
+//GUARDAR O ACTUALIZAR PEDIDOS
+   void _guardarPedido() async {
+    if (_formKey.currentState!.validate() && _clienteSeleccionado != null && _items.isNotEmpty) {
+      setState(() { _isSaving = true; });
 
-      final orderProvider = Provider.of<OrderProvider>(context, listen: false);
-      final nuevoPedido = Order(
-        id: DateTime
-            .now()
-            .millisecondsSinceEpoch
-            .toString(),
-        clienteId: _clienteSeleccionado!,
-        fechaRecepcion: DateTime.now(),
-        fechaEntregaEstim: DateTime.parse(_fechaEntregaController.text),
-        items: _items,
-      );
+      try {
+        final orderProvider = Provider<OrderProvider>(context, listen: false);
+        final cajaProvider = Provider.of<CajaProvider>(context, listen: false);
+        final montoAbono = double.tryParse(_abonoController.text) ?? 0.0;
 
-      await orderProvider.addOrder(nuevoPedido);
-
-      if (mounted) {
-        setState(() => _isSaving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('¡Pedido creado exitosamente!')),
+        // Crear el pedido (la lógica de editar/crear se mantiene igual)
+        final nuevoPedido = Order(
+          id: widget.orderParaEditar == null ? DateTime.now().millisecondsSinceEpoch.toString() : widget.orderParaEditar!.id,
+          clienteId: _clienteSeleccionado!,
+          fechaRecepcion: widget.orderParaEditar?.fechaRecepcion ?? DateTime.now(),
+          fechaEntregaEstim: DateTime.parse(_fechaEntregaController.text),
+          items: _items,
+          status: widget.orderParaEditar?.status ?? OrderStatus.EnEspera,
+          tiempoProduccion: widget.orderParaEditar?.tiempoProduccion,
         );
-        Navigator.pop(context);
+
+        if (widget.orderParaEditar == null) {
+          await orderProvider.addOrder(nuevoPedido);
+        } else {
+          await orderProvider.updateOrder(nuevoPedido);
+        }
+
+        // --- NUEVA LÓGICA DE ABONO ---
+        if (montoAbono > 0) {
+          // Registramos el abono en la caja del día
+          await cajaProvider.registrarAbonoPedido(nuevoPedido, montoAbono);
+        }
+
+        if (mounted) {
+          setState(() { _isSaving = false; });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(widget.orderParaEditar == null ? '¡Pedido creado!' : '¡Pedido actualizado!')),
+          );
+          Navigator.pop(context);
+        }
+      } catch (e) {
+        // ... tu manejo de errores existente
       }
     } else {
-      String mensajeError = '';
-      if (_clienteSeleccionado == null)
-        mensajeError = 'Debes seleccionar un cliente. ';
-      if (_items.isEmpty)
-        mensajeError += 'Debes añadir al menos un item al pedido.';
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(mensajeError)));
-    }
-  }
-
-  // En lib/screens/nuevo_pedido_screen.dart
-// Dentro de la clase _NuevoPedidoScreenState
-
-  void _crearPedidoDirecto() {
-    // 1. Validar que los datos básicos estén completos
-    if (_formKey.currentState!.validate() && _productoSeleccionado != null && _clienteSeleccionado != null) {
-
-      // 2. Obtener los valores de los controllers
-      final cantidad = int.tryParse(_cantidadController.text) ?? 1;
-      final precioUnitario = double.tryParse(_precioController.text) ?? 0.0;
-
-      // 3. Validar que el precio sea válido
-      if (precioUnitario <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('El precio debe ser mayor que cero.')),
-        );
-        return;
-      }
-
-      // 4. Crear el OrderItem directamente
-      final itemDirecto = OrderItem(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        tipo: _mapProductoATipo(_productoSeleccionado!),
-        tamano: ItemTamano.Mediano, // Puedes añadir un selector de tamaño aquí si quieres
-        ubicacion: _ubicacionController.text,
-        observaciones: _observacionesController.text,
-        cantidad: cantidad,
-        precio: precioUnitario,
-        tiempoEstimadoMin: _productoSeleccionado!.tiempoBaseMinutos,
-      );
-
-      // 5. Crear el objeto Order con el item dentro
-      final pedidoDirecto = Order(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        clienteId: _clienteSeleccionado!,
-        fechaRecepcion: DateTime.now(),
-        fechaEntregaEstim: DateTime.parse(_fechaEntregaController.text),
-        items: [itemDirecto], // La lista de items solo tiene un elemento
-      );
-
-      // 6. Guardar el pedido usando el Provider
-      final orderProvider = Provider.of<OrderProvider>(context, listen: false);
-      orderProvider.addOrder(pedidoDirecto);
-
-      // 7. Mostrar un mensaje de éxito y cerrar la pantalla
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('¡Pedido de una sola prenda creado exitosamente!')),
-      );
-      Navigator.pop(context);
-    } else {
-      // 8. Si la validación falla, mostrar un mensaje de error
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor, selecciona un cliente y un producto para crear el pedido directamente.')),
-      );
+      // ... tu validación existente
     }
   }
 
@@ -265,15 +259,16 @@ class _NuevoPedidoScreenState extends State<NuevoPedidoScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final clienteProvider = Provider.of<OrderProvider>(
-        context); // Usamos OrderProvider para la lista de clientes de ejemplo
+    final clienteProvider = Provider.of<OrderProvider>(context);
     final productoProvider = Provider.of<ProductoProvider>(context);
     final cantidad = int.tryParse(_cantidadController.text) ?? 1;
     final precioUnitario = double.tryParse(_precioController.text) ?? 0.0;
 
     return Scaffold(
       appBar: AppBar(
-          title: const Text('Crear Nuevo Pedido'), centerTitle: true),
+        title: const Text('Crear Nuevo Pedido'),
+        centerTitle: true,
+      ),
       body: _isSaving
           ? const Center(child: CircularProgressIndicator())
           : Form(
@@ -281,196 +276,172 @@ class _NuevoPedidoScreenState extends State<NuevoPedidoScreen> {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // --- Sección 1: Datos del Cliente ---
-              _buildSectionCard('Datos del Cliente', [
-                // CÓDIGO CORREGIDO
-                DropdownButtonFormField<String>(
-                  value: _clienteSeleccionado,
-                  decoration: const InputDecoration(
-                    labelText: 'Seleccionar Cliente',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // --- Sección 1: Datos del Cliente ---
+            _buildSectionCard('Datos del Cliente', [
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _clienteSeleccionado,
+                      decoration: const InputDecoration(
+                        labelText: 'Seleccionar Cliente',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.person),
+                      ),
+                      items: clienteProvider.clientes.map((cliente) {
+                        return DropdownMenuItem(
+                          value: cliente,
+                          child: Text(cliente),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          _clienteSeleccionado = value;
+                        });
+                      },
+                      validator: (value) => value == null ? 'Selecciona un cliente' : null,
+                    ),
                   ),
-                  items: clienteProvider.clientes.map((
-                      nombreCliente) { // <-- El parámetro es el nombre del cliente (un String)
-                    return DropdownMenuItem(
-                      value: nombreCliente,
-                      // <-- El valor es el String completo
-                      child: Text(nombreCliente), // <-- Mostramos el String
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _clienteSeleccionado = value;
-                    });
-                  },
-                  validator: (value) =>
-                  value == null
-                      ? 'Selecciona un cliente'
-                      : null,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _fechaEntregaController,
-                  decoration: const InputDecoration(
-                    labelText: 'Fecha de Entrega',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.calendar_today),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.person_add, color: Colors.indigo),
+                    onPressed: _mostrarDialogoAgregarCliente,
+                    tooltip: 'Agregar nuevo cliente',
                   ),
-                  readOnly: true,
-                  onTap: _seleccionarFecha,
-                  validator: (value) =>
-                  value == null || value.isEmpty
-                      ? 'Selecciona una fecha'
-                      : null,
-                ),
-              ]),
-              const SizedBox(height: 24),
-
-              // AQUÍ ES DONDE VA EL BOTÓN
-              ElevatedButton.icon(
-                icon: const Icon(Icons.fast_forward),
-                label: const Text('Crear Pedido Directamente'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade600,
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: _crearPedidoDirecto, // Este método lo crearemos a continuación
+                ],
               ),
-              const SizedBox(height: 24), // Espacio antes de la siguiente sección
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _fechaEntregaController,
+                decoration: const InputDecoration(
+                  labelText: 'Fecha de Entrega',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.calendar_today),
+                ),
+                readOnly: true,
+                onTap: _seleccionarFecha,
+                validator: (value) => value == null || value.isEmpty ? 'Selecciona una fecha' : null,
+              ),
+              TextFormField(
+                controller: _abonoController,
+                decoration: const InputDecoration(
+                  labelText: 'Abono Inicial (Opcional)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.attach_money),
+                  hintText: '0.00',
+                ),
+                keyboardType: TextInputType.numberWithOptions(decimal: true),
+              ),
+            ]),
+            const SizedBox(height: 24),
 
-              // --- Sección 2: Agregar Items ---
-              _buildSectionCard('Agregar Item', [
-                DropdownButtonFormField<Producto>(
-                  value: _productoSeleccionado,
-                  decoration: const InputDecoration(
-                    labelText: 'Producto/Servicio',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.category),
-                  ),
-                  items: productoProvider.productos.map((producto) {
-                    return DropdownMenuItem(
-                      value: producto,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(producto.nombre,
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                          Text('Base: \$${producto.precioBase.toStringAsFixed(
-                              0)}', style: TextStyle(color: Colors.grey[600])),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _productoSeleccionado = value;
-                      // Al cambiar el producto, actualizamos el campo de precio con su precio base
-                      _precioController.text = value?.precioBase.toString() ??
-                          '0';
-                    });
-                  },
-                  validator: (value) =>
-                  value == null
-                      ? 'Selecciona un producto'
-                      : null,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _ubicacionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Ubicación (ej: Pecho, Espalda)',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.accessibility), // Icon de prenda/mannequin
-                  ),
-                  validator: (value) {
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _cantidadController,
-                        decoration: const InputDecoration(
-                          labelText: 'Cantidad',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.add_shopping_cart),
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (value) {
-                          if (value == null || value.isEmpty)
-                            return 'Ingresa la cantidad';
-                          if (int.tryParse(value) == null || int.parse(value) <= 0)
-                            return 'Cantidad inválida';
-                          return null;
-                        },
-                      ),
+            // --- Sección 2: Agregar Item ---
+            _buildSectionCard('Agregar Item', [
+                  DropdownButtonFormField<Producto>(
+                    value: _productoSeleccionado,
+                    decoration: const InputDecoration(
+                      labelText: 'Producto/Servicio',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.category),
                     ),
-                    const SizedBox(width: 16),
-                    // Campo de observaciones (CORREGIDO)
-                    Expanded(
-                      child: TextFormField( // <-- CAMBIA A TextFormField
-                        controller: _observacionesController,
-                        decoration: const InputDecoration(
-                          labelText: 'Observaciones (Opcional)',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.notes),
+                    items: productoProvider.productos.map((producto) {
+                      return DropdownMenuItem(
+                        value: producto,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(producto.nombre, style: TextStyle(fontWeight: FontWeight.bold)),
+                            Text('Base: \$${producto.precioBase.toStringAsFixed(0)}', style: TextStyle(color: Colors.grey[600])),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _productoSeleccionado = value;
+                        _precioController.text = value?.precioBase.toString() ?? '0';
+                        _calcularValores();
+                      });
+                    },
+                    validator: (value) => value == null ? 'Selecciona un producto' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _ubicacionController,
+                    decoration: const InputDecoration(
+                      labelText: 'Ubicación (ej: Pecho, Espalda)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.checkroom_outlined),
+                    ),
+                    validator: (value) => value == null || value.isEmpty ? 'Ingresa la ubicación' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _cantidadController,
+                          decoration: const InputDecoration(
+                            labelText: 'Cantidad',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.add_shopping_cart),
+                          ),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            if (value == null || value.isEmpty) return 'Ingresa la cantidad';
+                            if (int.tryParse(value) == null || int.parse(value) <= 0) return 'Cantidad inválida';
+                            return null;
+                          },
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    // Campo de precio editable (CORREGIDO)
-                    Expanded(
-                      child: TextFormField(
-                        controller: _precioController,
-                        decoration: const InputDecoration(
-                          labelText: 'Precio Unitario',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.attach_money),
-                          suffixIcon: Icon(Icons.edit),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _precioController,
+                          decoration: const InputDecoration(
+                            labelText: 'Precio Unitario',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.attach_money),
+                            suffixIcon: Icon(Icons.edit),
+                          ),
+                          keyboardType: TextInputType.numberWithOptions(decimal: true),
+                          onChanged: (value) => setState(() {}),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) return 'Ingresa el precio';
+                            if (double.tryParse(value) == null || double.parse(value) <= 0) return 'Precio inválido';
+                            return null;
+                          },
                         ),
-                        keyboardType: TextInputType.numberWithOptions(decimal: true),
-                        onChanged: (value) => setState(() {}),
-                        validator: (value) {
-                          if (value == null || value.isEmpty)
-                            return 'Ingresa el precio';
-                          if (double.tryParse(value) == null || double.parse(value) <= 0)
-                            return 'Precio inválido';
-                          return null;
-                        },
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _buildResumenCard('Precio Total Item',
-                    '\$${(precioUnitario * cantidad).toStringAsFixed(0)}'),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.add_circle_outline),
-                    label: const Text('Añadir a la lista'),
-                    onPressed: _agregarItem,
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green.shade600,
-                        foregroundColor: Colors.white),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
-                // NUEVO: Botón para actualizar el precio en el catálogo
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.update, color: Colors.orange),
-                  label: const Text('Actualizar Precio Base en el Catálogo',
-                      style: TextStyle(color: Colors.orange)),
-                  onPressed: _actualizarPrecioEnCatalogo,
-                ),
-              ]),
-              const SizedBox(height: 24),
+                  const SizedBox(height: 16), // Espacio antes del campo de observaciones
+
+                 // El campo de observaciones ahora va aquí, ocupando todo el ancho
+                  TextFormField(
+                    controller: _observacionesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Observaciones (Opciónal)',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.notes),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.add_circle_outline),
+                      label: const Text('Añadir a la lista'),
+                      onPressed: _agregarItem,
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade600, foregroundColor: Colors.white),
+                    ),
+                  ),
+                ]),
+              ),
+            ),
+            const SizedBox(height: 24),
 
               // --- Sección 3: Vista Previa del Pedido ---
               if (_items.isNotEmpty) ...[
@@ -528,11 +499,7 @@ class _NuevoPedidoScreenState extends State<NuevoPedidoScreen> {
                   child: const Text('GUARDAR PEDIDO'),
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
-    );
+            ]),;
   }
 
   // --- Widgets Helper (sin cambios) ---

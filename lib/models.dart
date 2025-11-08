@@ -172,6 +172,7 @@ class Order {
   List<OrderItem> items;
   OrderStatus status;
   TiempoProduccion? tiempoProduccion;
+  final double totalPagado;
 
   Order({
     required this.id,
@@ -181,6 +182,7 @@ class Order {
     required this.items,
     this.status = OrderStatus.EnEspera,
     this.tiempoProduccion,
+    this.totalPagado = 0.0,
   });
 
   // Calcular total del pedido
@@ -191,6 +193,10 @@ class Order {
 
   // Getter para calcular tiempo total estimado
   int get totalTiempoEstimado => items.fold(0, (sum, item) => sum + item.tiempoEstimadoMin);
+
+  // <-- NUEVO GETTER PARA CALCULAR EL SALDO
+  double get saldoPendiente => total - totalPagado;
+
 }
 
 // --- NUEVO MODELO PARA EL CATÁLOGO ---
